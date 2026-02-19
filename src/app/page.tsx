@@ -106,8 +106,8 @@ export default function Home() {
           transition={{ delay: 0.8 }}
           className="text-squid-light/50 max-w-lg mx-auto mb-12 text-base"
         >
-          4 SE&apos;s enter. 2 survive. Vote for the best AI demo each week.
-          The top performers advance to the quarter finals.
+          4 SE&apos;s enter. 2 survive. Vote for the best AI demo each session.
+          The top demos advance to the end of quarter final.
         </motion.p>
 
         {/* Action buttons */}
