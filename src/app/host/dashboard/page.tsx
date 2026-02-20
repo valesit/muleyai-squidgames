@@ -17,13 +17,13 @@ export default function HostDashboard() {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [showSeasonForm, setShowSeasonForm] = useState(false);
   const [newSeasonName, setNewSeasonName] = useState("");
-  const [newSession, setNewSession] = useState({ title: "", week_number: 1, session_date: "" });
+  const [newSession, setNewSession] = useState({ title: "", week_number: 1, session_date: "", pot_contribution: 25 });
   const [newParticipant, setNewParticipant] = useState({ name: "", topic: "", image_url: "" });
   const [actionLoading, setActionLoading] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState<{ type: "session" | "season"; id: string } | null>(null);
   const [editingDemoUrl, setEditingDemoUrl] = useState<{ id: string; url: string } | null>(null);
 
-  const activeSeason = seasons.find((s) => s.status === "active");
+  const activeSeason = seasons.find((s) => s.status === "active" || s.status === "finale");
 
   const fetchSessions = useCallback(async () => {
     const res = await fetch("/api/sessions");
@@ -50,6 +50,16 @@ export default function HostDashboard() {
   const participants = currentSession?.participants || [];
   const eliminated = participants.filter((p) => p.status === "eliminated");
   const survivors = participants.filter((p) => p.status === "alive");
+
+  const seasonSessions = activeSeason
+    ? sessions.filter((s) => s.season_id === activeSeason.id)
+    : [];
+  const runningPotTotal = seasonSessions.reduce((sum, s) => sum + (s.pot_contribution || 25), 0);
+  const previousPotTotal = currentSession
+    ? seasonSessions
+        .filter((s) => s.week_number < currentSession.week_number && !s.is_finale)
+        .reduce((sum, s) => sum + (s.pot_contribution || 25), 0)
+    : 0;
 
   async function createSeason() {
     if (!newSeasonName.trim()) return;
@@ -95,9 +105,13 @@ export default function HostDashboard() {
     await fetch("/api/sessions", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ ...newSession, season_id: activeSeason?.id }),
+      body: JSON.stringify({
+        ...newSession,
+        season_id: activeSeason?.id,
+        pot_contribution: newSession.pot_contribution || 25,
+      }),
     });
-    setNewSession({ title: "", week_number: 1, session_date: "" });
+    setNewSession({ title: "", week_number: 1, session_date: "", pot_contribution: 25 });
     setShowCreateForm(false);
     await fetchAll();
     setActionLoading(false);
@@ -140,7 +154,7 @@ export default function HostDashboard() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ status }),
     });
-    await fetchSessions();
+    await fetchAll();
     setActionLoading(false);
 
     if (status === "results") {
@@ -179,7 +193,9 @@ export default function HostDashboard() {
         eliminated={eliminated}
         survivors={survivors}
         onComplete={() => setShowElimination(false)}
-        weekNumber={currentSession?.week_number || 1}
+        currentPotValue={runningPotTotal}
+        previousPotValue={previousPotTotal}
+        isFinale={currentSession?.is_finale || false}
       />
 
       {/* Header */}
@@ -190,7 +206,7 @@ export default function HostDashboard() {
             <h1 className="font-[family-name:var(--font-heading)] text-4xl md:text-5xl text-squid-pink tracking-wider">
               GAME MASTER
             </h1>
-            <p className="text-squid-light/40 text-sm">How We AI - Control Panel · MuleSoft SEs</p>
+            <p className="text-squid-light/40 text-sm">Trial by Tokens - Control Panel · MuleSoft SEs</p>
           </div>
         </div>
         <SoundController
@@ -209,12 +225,19 @@ export default function HostDashboard() {
       <div className="bg-squid-dark border border-squid-gold/30 rounded-2xl p-4 mb-6">
         <div className="flex items-center justify-between flex-wrap gap-4">
           <div>
-            <h2 className="font-[family-name:var(--font-heading)] text-xl text-squid-gold tracking-wider">
-              {activeSeason ? activeSeason.name.toUpperCase() : "NO ACTIVE SEASON"}
-            </h2>
+            <div className="flex items-center gap-3">
+              <h2 className="font-[family-name:var(--font-heading)] text-xl text-squid-gold tracking-wider">
+                {activeSeason ? activeSeason.name.toUpperCase() : "NO ACTIVE SEASON"}
+              </h2>
+              {activeSeason?.status === "finale" && (
+                <span className="text-xs px-2 py-0.5 rounded-full bg-squid-gold/20 text-squid-gold">
+                  FINALE IN PROGRESS
+                </span>
+              )}
+            </div>
             <p className="text-squid-light/40 text-xs">
               {activeSeason
-                ? `${sessions.filter((s) => s.season_id === activeSeason.id && !s.is_finale).length} sessions this season`
+                ? `${seasonSessions.filter((s) => !s.is_finale).length} sessions · Prize Pot: $${runningPotTotal}`
                 : "Create a season to start tracking"}
             </p>
           </div>
@@ -227,13 +250,13 @@ export default function HostDashboard() {
                 CREATE SEASON
               </button>
             )}
-            {activeSeason && (
+            {activeSeason && activeSeason.status === "active" && (
               <button
                 onClick={closeSeason}
                 disabled={actionLoading}
                 className="px-4 py-2 bg-squid-red text-white rounded-lg text-sm font-[family-name:var(--font-heading)] tracking-wider hover:bg-squid-red/80 transition-all disabled:opacity-50"
               >
-                CLOSE SEASON
+                CLOSE SEASON & CREATE FINALE
               </button>
             )}
           </div>
@@ -327,12 +350,14 @@ export default function HostDashboard() {
               <h2 className="font-[family-name:var(--font-heading)] text-2xl text-squid-light tracking-wider">
                 SESSIONS
               </h2>
-              <button
-                onClick={() => setShowCreateForm(!showCreateForm)}
-                className="w-8 h-8 rounded-full bg-squid-pink flex items-center justify-center text-white text-xl leading-none hover:bg-squid-pink-dark transition-colors"
-              >
-                +
-              </button>
+              {activeSeason && activeSeason.status === "active" && (
+                <button
+                  onClick={() => setShowCreateForm(!showCreateForm)}
+                  className="w-8 h-8 rounded-full bg-squid-pink flex items-center justify-center text-white text-xl leading-none hover:bg-squid-pink-dark transition-colors"
+                >
+                  +
+                </button>
+              )}
             </div>
 
             <AnimatePresence>
@@ -366,6 +391,18 @@ export default function HostDashboard() {
                       onChange={(e) => setNewSession({ ...newSession, session_date: e.target.value })}
                       className="w-full px-3 py-2 bg-squid-black border border-squid-grey rounded-lg text-squid-light text-sm focus:outline-none focus:border-squid-pink"
                     />
+                    <div>
+                      <label className="text-xs text-squid-light/40 mb-1 block">Pot Contribution ($)</label>
+                      <input
+                        type="number"
+                        placeholder="25"
+                        value={newSession.pot_contribution}
+                        onChange={(e) =>
+                          setNewSession({ ...newSession, pot_contribution: parseInt(e.target.value) || 25 })
+                        }
+                        className="w-full px-3 py-2 bg-squid-black border border-squid-grey rounded-lg text-squid-light text-sm placeholder:text-squid-light/20 focus:outline-none focus:border-squid-gold"
+                      />
+                    </div>
                     <button
                       onClick={createSession}
                       disabled={actionLoading || !newSession.title || !newSession.session_date}
@@ -417,7 +454,12 @@ export default function HostDashboard() {
                         {session.status.toUpperCase()}
                       </span>
                     </div>
-                    <p className="text-xs text-squid-light/40 mt-1">{session.title}</p>
+                    <p className="text-xs text-squid-light/40 mt-1">
+                      {session.title}
+                      {!session.is_finale && (
+                        <span className="text-squid-gold/60 ml-2">+${session.pot_contribution || 25}</span>
+                      )}
+                    </p>
                   </button>
                   <button
                     onClick={(e) => {
@@ -461,6 +503,16 @@ export default function HostDashboard() {
                         /vote/{currentSession.id}
                       </span>
                     </p>
+                    {!currentSession.is_finale && (
+                      <p className="text-squid-gold/60 text-xs mt-1">
+                        Session contribution: ${currentSession.pot_contribution || 25} · Running total: ${runningPotTotal}
+                      </p>
+                    )}
+                    {currentSession.is_finale && (
+                      <p className="text-squid-gold text-sm mt-1 font-[family-name:var(--font-heading)] tracking-wider">
+                        SEASON FINALE · PRIZE POT: ${runningPotTotal}
+                      </p>
+                    )}
                   </div>
 
                   {currentSession.status !== "completed" && (
@@ -485,7 +537,7 @@ export default function HostDashboard() {
               {/* Participants */}
               <div className="bg-squid-dark border border-squid-grey rounded-2xl p-6">
                 <h3 className="font-[family-name:var(--font-heading)] text-2xl text-squid-light tracking-wider mb-4">
-                  PLAYERS ({participants.length}/4)
+                  {currentSession.is_finale ? "FINALISTS" : `PLAYERS (${participants.length}/4)`}
                 </h3>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
@@ -535,7 +587,6 @@ export default function HostDashboard() {
                               {p.vote_count} votes
                             </p>
                           )}
-                          {/* Demo URL section - only for completed/results sessions */}
                           {(currentSession.status === "completed" || currentSession.status === "results") && (
                             <div className="mt-2">
                               {editingDemoUrl?.id === p.id ? (
@@ -590,7 +641,7 @@ export default function HostDashboard() {
                             </div>
                           )}
                         </div>
-                        {currentSession.status === "lobby" && (
+                        {currentSession.status === "lobby" && !currentSession.is_finale && (
                           <button
                             onClick={() => removeParticipant(p.id)}
                             className="text-squid-red/50 hover:text-squid-red text-sm transition-colors"
@@ -602,8 +653,8 @@ export default function HostDashboard() {
                     ))}
                 </div>
 
-                {/* Add Participant form */}
-                {currentSession.status === "lobby" && participants.length < 4 && (
+                {/* Add Participant form - only for regular sessions in lobby */}
+                {currentSession.status === "lobby" && !currentSession.is_finale && participants.length < 4 && (
                   <div className="border-t border-squid-grey pt-4">
                     <h4 className="font-[family-name:var(--font-heading)] text-lg text-squid-light/60 tracking-wider mb-3">
                       ADD PLAYER

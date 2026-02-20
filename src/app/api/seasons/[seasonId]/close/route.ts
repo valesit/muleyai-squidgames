@@ -7,7 +7,6 @@ export async function PATCH(
 ) {
   const { seasonId } = await params;
 
-  // 1. Get the season to verify it exists and is active
   const { data: season, error: seasonError } = await supabaseAdmin
     .from("seasons")
     .select("*")
@@ -18,11 +17,29 @@ export async function PATCH(
     return NextResponse.json({ error: "Season not found" }, { status: 404 });
   }
 
-  if (season.status === "closed") {
-    return NextResponse.json({ error: "Season is already closed" }, { status: 400 });
+  if (season.status !== "active") {
+    return NextResponse.json(
+      { error: "Season must be active to close. Current status: " + season.status },
+      { status: 400 }
+    );
   }
 
-  // 2. Get all weekly finalists (alive participants) from this season's sessions
+  // Check that no finale already exists for this season
+  const { data: existingFinale } = await supabaseAdmin
+    .from("sessions")
+    .select("id")
+    .eq("season_id", seasonId)
+    .eq("is_finale", true)
+    .limit(1);
+
+  if (existingFinale && existingFinale.length > 0) {
+    return NextResponse.json(
+      { error: "A finale already exists for this season" },
+      { status: 400 }
+    );
+  }
+
+  // Get all weekly finalists (alive participants) from this season's sessions
   const { data: sessions } = await supabaseAdmin
     .from("sessions")
     .select("*, participants(*)")
@@ -40,17 +57,17 @@ export async function PATCH(
       }))
   );
 
-  // 3. Close the current season
-  const { error: closeError } = await supabaseAdmin
+  // Set season to "finale" status (not fully closed until finale voting ends)
+  const { error: updateError } = await supabaseAdmin
     .from("seasons")
-    .update({ status: "closed" })
+    .update({ status: "finale" })
     .eq("id", seasonId);
 
-  if (closeError) {
-    return NextResponse.json({ error: closeError.message }, { status: 500 });
+  if (updateError) {
+    return NextResponse.json({ error: updateError.message }, { status: 500 });
   }
 
-  // 4. Create the Season Finale session with all finalists
+  // Create the Season Finale session with all finalists
   const finaleTitle = `${season.name} - Season Finale`;
   const { data: finaleSession, error: finaleError } = await supabaseAdmin
     .from("sessions")
@@ -61,6 +78,7 @@ export async function PATCH(
       status: "lobby",
       season_id: seasonId,
       is_finale: true,
+      pot_contribution: 0,
     })
     .select()
     .single();
@@ -69,7 +87,7 @@ export async function PATCH(
     return NextResponse.json({ error: finaleError.message }, { status: 500 });
   }
 
-  // 5. Add all finalists as participants in the finale session
+  // Add all finalists as participants in the finale session
   if (finalists.length > 0) {
     const finaleParticipants = finalists.map((f, index) => ({
       session_id: finaleSession.id,
@@ -85,25 +103,9 @@ export async function PATCH(
     await supabaseAdmin.from("participants").insert(finaleParticipants);
   }
 
-  // 6. Create a new active season
-  const newSeasonNumber = parseInt(season.name.replace(/\D/g, "") || "0") + 1;
-  const { data: newSeason, error: newSeasonError } = await supabaseAdmin
-    .from("seasons")
-    .insert({
-      name: `Season ${newSeasonNumber}`,
-      status: "active",
-    })
-    .select()
-    .single();
-
-  if (newSeasonError) {
-    return NextResponse.json({ error: newSeasonError.message }, { status: 500 });
-  }
-
   return NextResponse.json({
-    closedSeason: { ...season, status: "closed" },
+    season: { ...season, status: "finale" },
     finaleSession,
     finalistsCount: finalists.length,
-    newSeason,
   });
 }

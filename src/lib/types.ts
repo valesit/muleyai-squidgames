@@ -1,11 +1,13 @@
 export type SessionStatus = "lobby" | "voting" | "results" | "completed";
 export type ParticipantStatus = "alive" | "eliminated";
-export type SeasonStatus = "active" | "closed";
+export type SeasonStatus = "active" | "finale" | "closed";
 
 export interface Season {
   id: string;
   name: string;
   status: SeasonStatus;
+  winner_name: string | null;
+  total_prize_pot: number | null;
   created_at: string;
 }
 
@@ -17,6 +19,7 @@ export interface Session {
   status: SessionStatus;
   season_id: string | null;
   is_finale: boolean;
+  pot_contribution: number;
   created_at: string;
 }
 

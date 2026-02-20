@@ -1,0 +1,14 @@
+-- Muley SE AI Trial by Tokens - Migration v3
+-- Run this on existing databases to add prize pot tracking, season winner, and finale status
+
+-- 1. Add pot_contribution to sessions (default $25 per session)
+ALTER TABLE sessions ADD COLUMN IF NOT EXISTS pot_contribution INTEGER NOT NULL DEFAULT 25;
+
+-- 2. Add winner tracking and total prize pot to seasons
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS winner_name TEXT;
+ALTER TABLE seasons ADD COLUMN IF NOT EXISTS total_prize_pot INTEGER;
+
+-- 3. Allow 'finale' as a season status (active -> finale -> closed)
+ALTER TABLE seasons DROP CONSTRAINT IF EXISTS seasons_status_check;
+ALTER TABLE seasons ADD CONSTRAINT seasons_status_check
+  CHECK (status IN ('active', 'finale', 'closed'));

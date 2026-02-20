@@ -4,7 +4,7 @@ import { useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import { supabase } from "@/lib/supabase";
 import MuleyLogo from "@/components/MuleyLogo";
-import { Session, Participant } from "@/lib/types";
+import { Session, Participant, Season } from "@/lib/types";
 import { FloatingShapes } from "@/components/SquidShapes";
 import Link from "next/link";
 
@@ -14,28 +14,45 @@ interface SessionWithParticipants extends Session {
 
 export default function LeaderboardPage() {
   const [sessions, setSessions] = useState<SessionWithParticipants[]>([]);
+  const [activeSeason, setActiveSeason] = useState<Season | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
     async function fetchLeaderboard() {
-      const { data } = await supabase
-        .from("sessions")
-        .select("*, participants(*)")
-        .in("status", ["results", "completed"])
-        .order("week_number", { ascending: true });
+      // Find the current active or finale season
+      const { data: seasons } = await supabase
+        .from("seasons")
+        .select("*")
+        .in("status", ["active", "finale"])
+        .order("created_at", { ascending: false })
+        .limit(1);
 
-      if (data) setSessions(data);
+      const season = seasons?.[0] || null;
+      setActiveSeason(season);
+
+      if (season) {
+        const { data } = await supabase
+          .from("sessions")
+          .select("*, participants(*)")
+          .eq("season_id", season.id)
+          .in("status", ["results", "completed"])
+          .order("week_number", { ascending: true });
+
+        if (data) setSessions(data);
+      }
+
       setLoading(false);
     }
     fetchLeaderboard();
   }, []);
 
-  // Collect all surviving participants across sessions for the finals tracker
-  const allSurvivors = sessions.flatMap((s) =>
-    s.participants
-      .filter((p) => p.status === "alive")
-      .map((p) => ({ ...p, week: s.week_number, sessionTitle: s.title }))
-  );
+  const allSurvivors = sessions
+    .filter((s) => !s.is_finale)
+    .flatMap((s) =>
+      s.participants
+        .filter((p) => p.status === "alive")
+        .map((p) => ({ ...p, week: s.week_number, sessionTitle: s.title }))
+    );
 
   if (loading) {
     return (
@@ -74,193 +91,213 @@ export default function LeaderboardPage() {
             <div className="w-3 h-3 border border-squid-pink" />
           </div>
           <p className="text-squid-light/40">
-            How We AI - Quarter Finals Tracker
+            {activeSeason
+              ? `${activeSeason.name} - Season Leaderboard`
+              : "Trial by Tokens - Season Leaderboard"}
           </p>
         </div>
 
-        {/* Finals Qualifiers Summary */}
-        {allSurvivors.length > 0 && (
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            className="mb-12"
-          >
-            <h2 className="font-[family-name:var(--font-heading)] text-3xl text-squid-green tracking-wider text-center mb-6">
-              QUARTER-FINALS QUALIFIERS
-            </h2>
-            <div className="flex flex-wrap justify-center gap-6">
-              {allSurvivors.map((p) => (
-                <motion.div
-                  key={p.id}
-                  initial={{ opacity: 0, scale: 0.8 }}
-                  animate={{ opacity: 1, scale: 1 }}
-                  className="text-center"
-                >
-                  <div className="w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden border-3 border-squid-green shadow-[0_0_20px_rgba(0,181,226,0.3)] mx-auto mb-2">
-                    {p.image_url ? (
-                      // eslint-disable-next-line @next/next/no-img-element
-                      <img
-                        src={p.image_url}
-                        alt={p.name}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full flex items-center justify-center bg-squid-darker text-2xl font-[family-name:var(--font-heading)] text-squid-green">
-                        {p.player_number}
-                      </div>
-                    )}
-                  </div>
-                  <p className="font-[family-name:var(--font-heading)] text-lg text-squid-green tracking-wider">
-                    {p.name}
-                  </p>
-                  <p className="text-xs text-squid-light/40">Week {p.week}</p>
-                </motion.div>
-              ))}
-            </div>
-          </motion.div>
-        )}
-
-        {/* Horizontal separator */}
-        <div className="h-px bg-gradient-to-r from-transparent via-squid-pink/30 to-transparent mb-12" />
-
-        {/* Week-by-Week Results */}
-        {sessions.length === 0 ? (
+        {!activeSeason ? (
           <div className="text-center py-20">
             <div className="w-24 h-24 rounded-full border-4 border-squid-grey mx-auto mb-6 flex items-center justify-center">
               <span className="text-4xl text-squid-grey">?</span>
             </div>
             <p className="font-[family-name:var(--font-heading)] text-2xl text-squid-light/30 tracking-wider">
-              NO GAMES PLAYED YET
+              NO ACTIVE SEASON
             </p>
             <p className="text-squid-light/20 mt-2 text-sm">
-              Results will appear here after the first voting session.
+              Check out{" "}
+              <Link href="/history" className="text-squid-gold hover:underline">
+                past season results
+              </Link>
+              .
             </p>
           </div>
         ) : (
-          <div className="space-y-12">
-            {sessions.map((session, index) => (
+          <>
+            {/* Season Qualifiers Summary */}
+            {allSurvivors.length > 0 && (
               <motion.div
-                key={session.id}
-                initial={{ opacity: 0, y: 30 }}
+                initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: index * 0.1 }}
+                className="mb-12"
               >
-                {/* Week Header */}
-                <div className="flex items-center gap-4 mb-6">
-                  <div className="w-12 h-12 rounded-full bg-squid-pink/20 border-2 border-squid-pink flex items-center justify-center shrink-0">
-                    <span className="font-[family-name:var(--font-heading)] text-xl text-squid-pink">
-                      {session.week_number}
-                    </span>
-                  </div>
-                  <div>
-                    <h3 className="font-[family-name:var(--font-heading)] text-2xl text-squid-light tracking-wider">
-                      WEEK {session.week_number}
-                    </h3>
-                    <p className="text-xs text-squid-light/40">{session.title}</p>
-                  </div>
-                  <div className="flex-1 h-px bg-squid-grey" />
-                </div>
-
-                {/* Participants Grid */}
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-                  {session.participants
-                    .sort((a, b) => a.player_number - b.player_number)
-                    .map((p) => {
-                      const isEliminated = p.status === "eliminated";
-                      return (
-                        <div
-                          key={p.id}
-                          className={`relative rounded-2xl overflow-hidden border-2 ${
-                            isEliminated
-                              ? "border-squid-pink/30"
-                              : "border-squid-green shadow-[0_0_15px_rgba(0,181,226,0.2)]"
-                          } bg-squid-dark`}
-                        >
-                          {/* Player number */}
-                          <div
-                            className={`absolute top-3 left-3 z-10 w-8 h-8 rounded-full flex items-center justify-center ${
-                              isEliminated ? "bg-squid-pink/50" : "bg-squid-teal"
-                            }`}
-                          >
-                            <span className="font-[family-name:var(--font-heading)] text-sm text-white">
-                              {p.player_number}
-                            </span>
+                <h2 className="font-[family-name:var(--font-heading)] text-3xl text-squid-green tracking-wider text-center mb-6">
+                  SEASON FINALISTS
+                </h2>
+                <div className="flex flex-wrap justify-center gap-6">
+                  {allSurvivors.map((p) => (
+                    <motion.div
+                      key={p.id}
+                      initial={{ opacity: 0, scale: 0.8 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      className="text-center"
+                    >
+                      <div className="w-24 h-24 md:w-28 md:h-28 rounded-full overflow-hidden border-3 border-squid-green shadow-[0_0_20px_rgba(0,181,226,0.3)] mx-auto mb-2">
+                        {p.image_url ? (
+                          // eslint-disable-next-line @next/next/no-img-element
+                          <img
+                            src={p.image_url}
+                            alt={p.name}
+                            className="w-full h-full object-cover"
+                          />
+                        ) : (
+                          <div className="w-full h-full flex items-center justify-center bg-squid-darker text-2xl font-[family-name:var(--font-heading)] text-squid-green">
+                            {p.player_number}
                           </div>
-
-                          {/* Image */}
-                          <div
-                            className={`aspect-square relative ${
-                              isEliminated ? "grayscale brightness-50 opacity-60" : ""
-                            }`}
-                          >
-                            {p.image_url ? (
-                              // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={p.image_url}
-                                alt={p.name}
-                                className="w-full h-full object-cover"
-                              />
-                            ) : (
-                              <div className="w-full h-full flex items-center justify-center bg-squid-darker text-5xl font-[family-name:var(--font-heading)] text-squid-grey">
-                                {p.player_number}
-                              </div>
-                            )}
-                          </div>
-
-                          {/* Eliminated X */}
-                          {isEliminated && (
-                            <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
-                              <span className="text-[6rem] font-[family-name:var(--font-heading)] text-squid-pink/70 drop-shadow-[0_0_20px_rgba(255,40,126,0.6)]">
-                                X
-                              </span>
-                            </div>
-                          )}
-
-                          {/* Info */}
-                          <div className="p-3">
-                            <p className="font-[family-name:var(--font-heading)] text-lg text-squid-light tracking-wider">
-                              {p.name}
-                            </p>
-                            {p.topic && (
-                              <p className="text-xs text-squid-light/40 line-clamp-1">
-                                {p.topic}
-                              </p>
-                            )}
-                            {p.demo_url && (
-                              <a
-                                href={p.demo_url}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="inline-flex items-center gap-1 mt-1 text-xs text-squid-green hover:text-squid-green/80 transition-colors"
-                              >
-                                <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
-                                </svg>
-                                View Demo
-                              </a>
-                            )}
-                            <div className="flex items-center justify-between mt-2">
-                              <span className="font-[family-name:var(--font-mono)] text-sm text-squid-light/60">
-                                {p.vote_count} votes
-                              </span>
-                              <span
-                                className={`text-xs px-2 py-0.5 rounded-full font-bold ${
-                                  isEliminated
-                                    ? "bg-squid-pink/20 text-squid-pink"
-                                    : "bg-squid-green/20 text-squid-green"
-                                }`}
-                              >
-                                {isEliminated ? "OUT" : "ALIVE"}
-                              </span>
-                            </div>
-                          </div>
-                        </div>
-                      );
-                    })}
+                        )}
+                      </div>
+                      <p className="font-[family-name:var(--font-heading)] text-lg text-squid-green tracking-wider">
+                        {p.name}
+                      </p>
+                      <p className="text-xs text-squid-light/40">Week {p.week}</p>
+                    </motion.div>
+                  ))}
                 </div>
               </motion.div>
-            ))}
-          </div>
+            )}
+
+            <div className="h-px bg-gradient-to-r from-transparent via-squid-pink/30 to-transparent mb-12" />
+
+            {/* Week-by-Week Results */}
+            {sessions.length === 0 ? (
+              <div className="text-center py-20">
+                <div className="w-24 h-24 rounded-full border-4 border-squid-grey mx-auto mb-6 flex items-center justify-center">
+                  <span className="text-4xl text-squid-grey">?</span>
+                </div>
+                <p className="font-[family-name:var(--font-heading)] text-2xl text-squid-light/30 tracking-wider">
+                  NO GAMES PLAYED YET
+                </p>
+                <p className="text-squid-light/20 mt-2 text-sm">
+                  Results will appear here after the first voting session.
+                </p>
+              </div>
+            ) : (
+              <div className="space-y-12">
+                {sessions.map((session, index) => (
+                  <motion.div
+                    key={session.id}
+                    initial={{ opacity: 0, y: 30 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.1 }}
+                  >
+                    <div className="flex items-center gap-4 mb-6">
+                      <div className={`w-12 h-12 rounded-full ${session.is_finale ? "bg-squid-gold/20 border-2 border-squid-gold" : "bg-squid-pink/20 border-2 border-squid-pink"} flex items-center justify-center shrink-0`}>
+                        <span className={`font-[family-name:var(--font-heading)] text-xl ${session.is_finale ? "text-squid-gold" : "text-squid-pink"}`}>
+                          {session.is_finale ? "★" : session.week_number}
+                        </span>
+                      </div>
+                      <div>
+                        <h3 className="font-[family-name:var(--font-heading)] text-2xl text-squid-light tracking-wider">
+                          {session.is_finale ? "SEASON FINALE" : `WEEK ${session.week_number}`}
+                        </h3>
+                        <p className="text-xs text-squid-light/40">{session.title}</p>
+                      </div>
+                      <div className="flex-1 h-px bg-squid-grey" />
+                    </div>
+
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                      {session.participants
+                        .sort((a, b) => a.player_number - b.player_number)
+                        .map((p) => {
+                          const isEliminated = p.status === "eliminated";
+                          const isWinner = session.is_finale && p.status === "alive";
+                          return (
+                            <div
+                              key={p.id}
+                              className={`relative rounded-2xl overflow-hidden border-2 ${
+                                isWinner
+                                  ? "border-squid-gold shadow-[0_0_15px_rgba(255,215,0,0.3)]"
+                                  : isEliminated
+                                  ? "border-squid-pink/30"
+                                  : "border-squid-green shadow-[0_0_15px_rgba(0,181,226,0.2)]"
+                              } bg-squid-dark`}
+                            >
+                              <div
+                                className={`absolute top-3 left-3 z-10 w-8 h-8 rounded-full flex items-center justify-center ${
+                                  isWinner ? "bg-squid-gold" : isEliminated ? "bg-squid-pink/50" : "bg-squid-teal"
+                                }`}
+                              >
+                                <span className="font-[family-name:var(--font-heading)] text-sm text-white">
+                                  {isWinner ? "👑" : p.player_number}
+                                </span>
+                              </div>
+
+                              <div
+                                className={`aspect-square relative ${
+                                  isEliminated ? "grayscale brightness-50 opacity-60" : ""
+                                }`}
+                              >
+                                {p.image_url ? (
+                                  // eslint-disable-next-line @next/next/no-img-element
+                                  <img
+                                    src={p.image_url}
+                                    alt={p.name}
+                                    className="w-full h-full object-cover"
+                                  />
+                                ) : (
+                                  <div className="w-full h-full flex items-center justify-center bg-squid-darker text-5xl font-[family-name:var(--font-heading)] text-squid-grey">
+                                    {p.player_number}
+                                  </div>
+                                )}
+                              </div>
+
+                              {isEliminated && (
+                                <div className="absolute inset-0 flex items-center justify-center pointer-events-none">
+                                  <span className="text-[6rem] font-[family-name:var(--font-heading)] text-squid-pink/70 drop-shadow-[0_0_20px_rgba(255,40,126,0.6)]">
+                                    X
+                                  </span>
+                                </div>
+                              )}
+
+                              <div className="p-3">
+                                <p className="font-[family-name:var(--font-heading)] text-lg text-squid-light tracking-wider">
+                                  {p.name}
+                                </p>
+                                {p.topic && (
+                                  <p className="text-xs text-squid-light/40 line-clamp-1">
+                                    {p.topic}
+                                  </p>
+                                )}
+                                {p.demo_url && (
+                                  <a
+                                    href={p.demo_url}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    className="inline-flex items-center gap-1 mt-1 text-xs text-squid-green hover:text-squid-green/80 transition-colors"
+                                  >
+                                    <svg className="w-3 h-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M10 6H6a2 2 0 00-2 2v10a2 2 0 002 2h10a2 2 0 002-2v-4M14 4h6m0 0v6m0-6L10 14" />
+                                    </svg>
+                                    View Demo
+                                  </a>
+                                )}
+                                <div className="flex items-center justify-between mt-2">
+                                  <span className="font-[family-name:var(--font-mono)] text-sm text-squid-light/60">
+                                    {p.vote_count} votes
+                                  </span>
+                                  <span
+                                    className={`text-xs px-2 py-0.5 rounded-full font-bold ${
+                                      isWinner
+                                        ? "bg-squid-gold/20 text-squid-gold"
+                                        : isEliminated
+                                        ? "bg-squid-pink/20 text-squid-pink"
+                                        : "bg-squid-green/20 text-squid-green"
+                                    }`}
+                                  >
+                                    {isWinner ? "WINNER" : isEliminated ? "OUT" : "ALIVE"}
+                                  </span>
+                                </div>
+                              </div>
+                            </div>
+                          );
+                        })}
+                    </div>
+                  </motion.div>
+                ))}
+              </div>
+            )}
+          </>
         )}
       </div>
     </div>

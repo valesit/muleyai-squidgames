@@ -1,11 +1,13 @@
--- Muley SE AI Squid Games - Database Schema
+-- Muley SE AI Trial by Tokens - Database Schema
 -- Run this in your Supabase SQL Editor to set up the database.
 
--- Seasons table for quarter tracking
+-- Seasons table for tracking competition seasons
 CREATE TABLE seasons (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT NOT NULL,
-  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'closed')),
+  status TEXT NOT NULL DEFAULT 'active' CHECK (status IN ('active', 'finale', 'closed')),
+  winner_name TEXT,
+  total_prize_pot INTEGER,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -18,6 +20,7 @@ CREATE TABLE sessions (
     CHECK (status IN ('lobby', 'voting', 'results', 'completed')),
   season_id UUID REFERENCES seasons(id) ON DELETE SET NULL,
   is_finale BOOLEAN DEFAULT false,
+  pot_contribution INTEGER NOT NULL DEFAULT 25,
   created_at TIMESTAMPTZ DEFAULT NOW()
 );
 
@@ -27,7 +30,7 @@ CREATE TABLE participants (
   name TEXT NOT NULL,
   topic TEXT NOT NULL DEFAULT '',
   image_url TEXT NOT NULL DEFAULT '',
-  player_number INTEGER NOT NULL CHECK (player_number BETWEEN 1 AND 4),
+  player_number INTEGER NOT NULL CHECK (player_number BETWEEN 1 AND 99),
   status TEXT NOT NULL DEFAULT 'alive'
     CHECK (status IN ('alive', 'eliminated')),
   vote_count INTEGER NOT NULL DEFAULT 0,

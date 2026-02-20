@@ -13,7 +13,20 @@ export async function PATCH(
     return NextResponse.json({ error: "Invalid status" }, { status: 400 });
   }
 
-  // When transitioning to "results", tally votes and mark bottom 2 as eliminated
+  // Fetch the session to check if it's a finale
+  const { data: session, error: sessionError } = await supabaseAdmin
+    .from("sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .single();
+
+  if (sessionError || !session) {
+    return NextResponse.json({ error: "Session not found" }, { status: 404 });
+  }
+
+  const isFinale = session.is_finale;
+
+  // When transitioning to "results", tally votes and determine outcomes
   if (status === "results") {
     const { data: participants, error: pError } = await supabaseAdmin
       .from("participants")
@@ -24,9 +37,7 @@ export async function PATCH(
       return NextResponse.json({ error: pError.message }, { status: 500 });
     }
 
-    // Edge case: If only 2 participants, both automatically qualify (no elimination)
-    if ((participants || []).length <= 2) {
-      // Mark all as alive (qualifiers)
+    if ((participants || []).length <= 2 && !isFinale) {
       const allIds = (participants || []).map((p) => p.id);
       if (allIds.length > 0) {
         await supabaseAdmin
@@ -35,7 +46,6 @@ export async function PATCH(
           .in("id", allIds);
       }
     } else {
-      // Standard elimination logic for 3+ participants
       // Count votes per participant
       const { data: votes, error: vError } = await supabaseAdmin
         .from("votes")
@@ -62,30 +72,89 @@ export async function PATCH(
           .eq("id", p.id);
       }
 
-      // Sort by votes ascending (bottom 2 are eliminated)
+      // Sort by votes descending
       const sorted = [...(participants || [])].sort(
-        (a, b) => (voteCounts[a.id] || 0) - (voteCounts[b.id] || 0)
+        (a, b) => (voteCounts[b.id] || 0) - (voteCounts[a.id] || 0)
       );
 
-      const eliminatedIds = sorted.slice(0, 2).map((p) => p.id);
-      const survivorIds = sorted.slice(2).map((p) => p.id);
+      if (isFinale) {
+        // FINALE: only 1 winner (top vote-getter), everyone else eliminated
+        const winnerId = sorted[0]?.id;
+        const loserIds = sorted.slice(1).map((p) => p.id);
 
-      if (eliminatedIds.length > 0) {
-        await supabaseAdmin
-          .from("participants")
-          .update({ status: "eliminated" })
-          .in("id", eliminatedIds);
-      }
+        if (winnerId) {
+          await supabaseAdmin
+            .from("participants")
+            .update({ status: "alive" })
+            .eq("id", winnerId);
+        }
 
-      if (survivorIds.length > 0) {
-        await supabaseAdmin
-          .from("participants")
-          .update({ status: "alive" })
-          .in("id", survivorIds);
+        if (loserIds.length > 0) {
+          await supabaseAdmin
+            .from("participants")
+            .update({ status: "eliminated" })
+            .in("id", loserIds);
+        }
+
+        // Officially close the season
+        if (session.season_id) {
+          // Compute total prize pot from all sessions in this season
+          const { data: seasonSessions } = await supabaseAdmin
+            .from("sessions")
+            .select("pot_contribution")
+            .eq("season_id", session.season_id)
+            .eq("is_finale", false);
+
+          const totalPrizePot = (seasonSessions || []).reduce(
+            (sum, s) => sum + (s.pot_contribution || 25),
+            0
+          );
+
+          const winnerName = sorted[0]?.name || "Unknown";
+
+          await supabaseAdmin
+            .from("seasons")
+            .update({
+              status: "closed",
+              winner_name: winnerName,
+              total_prize_pot: totalPrizePot,
+            })
+            .eq("id", session.season_id);
+
+          // Archive all sessions in this season (mark as completed)
+          await supabaseAdmin
+            .from("sessions")
+            .update({ status: "completed" })
+            .eq("season_id", session.season_id)
+            .neq("id", sessionId);
+        }
+      } else {
+        // REGULAR SESSION: bottom 2 eliminated, top 2 survive
+        const sortedAsc = [...(participants || [])].sort(
+          (a, b) => (voteCounts[a.id] || 0) - (voteCounts[b.id] || 0)
+        );
+
+        const eliminatedIds = sortedAsc.slice(0, 2).map((p) => p.id);
+        const survivorIds = sortedAsc.slice(2).map((p) => p.id);
+
+        if (eliminatedIds.length > 0) {
+          await supabaseAdmin
+            .from("participants")
+            .update({ status: "eliminated" })
+            .in("id", eliminatedIds);
+        }
+
+        if (survivorIds.length > 0) {
+          await supabaseAdmin
+            .from("participants")
+            .update({ status: "alive" })
+            .in("id", survivorIds);
+        }
       }
     }
   }
 
+  // Update session status (for finale going to "results", it's already being set)
   const { data, error } = await supabaseAdmin
     .from("sessions")
     .update({ status })
