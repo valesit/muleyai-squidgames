@@ -193,7 +193,7 @@ export function MuleyBadge({ className = "" }: { className?: string }) {
       transition={{ delay: 0.9 }}
       className={`inline-flex items-center gap-2 px-4 py-2 rounded-full border border-squid-grey bg-squid-dark/80 ${className}`}
     >
-      <MuleyLogoPink size={32} />
+      <MuleyLogoImage size={32} />
       <span className="text-xs text-squid-light/60 tracking-wider uppercase font-[family-name:var(--font-heading)]">
         For MuleSoft SEs
       </span>

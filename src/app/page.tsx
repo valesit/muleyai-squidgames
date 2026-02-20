@@ -2,10 +2,9 @@
 
 import { motion } from "framer-motion";
 import { EnhancedFloatingShapes } from "@/components/SquidShapes";
-import { MuleyLogoPink, MuleyBadge } from "@/components/MuleyLogo";
+import { MuleyLogoImage, MuleyBadge } from "@/components/MuleyLogo";
 import SquidDoll from "@/components/SquidDoll";
 import Link from "next/link";
-import Image from "next/image";
 import { useEffect, useState } from "react";
 import { supabase } from "@/lib/supabase";
 import { Session } from "@/lib/types";
@@ -38,7 +37,7 @@ export default function Home() {
       <div className="scanlines fixed inset-0 pointer-events-none z-10" />
 
       <div className="relative z-20 text-center px-6">
-        {/* Muley logo (SVG, no 456) + shapes */}
+        {/* Muley logo + shapes */}
         <motion.div
           initial={{ opacity: 0, y: -30 }}
           animate={{ opacity: 1, y: 0 }}
@@ -53,7 +52,7 @@ export default function Home() {
               strokeWidth="6"
             />
           </svg>
-          <MuleyLogoPink size={100} className="shrink-0" />
+          <MuleyLogoImage size={100} className="shrink-0" />
           <svg viewBox="0 0 100 100" className="w-10 h-10 shrink-0">
             <polygon
               points="50,5 95,95 5,95"
@@ -65,63 +64,17 @@ export default function Home() {
           <div className="w-10 h-10 border-3 border-squid-pink shrink-0" />
         </motion.div>
 
-        {/* Title + AI Battle Image */}
-        <div className="flex items-center justify-center gap-6 md:gap-10">
-          {/* AI Battle image - left side */}
-          <motion.div
-            initial={{ opacity: 0, x: -40 }}
-            animate={{ opacity: 0.65, x: 0 }}
-            transition={{ delay: 0.6, duration: 0.8 }}
-            className="hidden md:block shrink-0"
-          >
-            <motion.div
-              animate={{ y: [0, -6, 0], scale: [1, 1.02, 1] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut" }}
-            >
-              <Image
-                src="/ai-battle.png"
-                alt="AI Battle"
-                width={140}
-                height={90}
-                className="rounded-xl object-cover drop-shadow-[0_0_20px_rgba(255,40,126,0.3)]"
-                priority
-              />
-            </motion.div>
-          </motion.div>
-
-          <motion.h1
-            initial={{ opacity: 0, scale: 0.8 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ duration: 0.8, type: "spring" }}
-            className="font-[family-name:var(--font-heading)] text-6xl md:text-8xl lg:text-9xl text-squid-pink glitch-text mb-4 leading-none"
-          >
-            MULEY SE AI
-            <br />
-            TRIAL BY TOKENS
-          </motion.h1>
-
-          {/* AI Battle image - right side */}
-          <motion.div
-            initial={{ opacity: 0, x: 40 }}
-            animate={{ opacity: 0.65, x: 0 }}
-            transition={{ delay: 0.6, duration: 0.8 }}
-            className="hidden md:block shrink-0"
-          >
-            <motion.div
-              animate={{ y: [0, 6, 0], scale: [1, 1.02, 1] }}
-              transition={{ duration: 4, repeat: Infinity, ease: "easeInOut", delay: 2 }}
-            >
-              <Image
-                src="/ai-battle.png"
-                alt="AI Battle"
-                width={140}
-                height={90}
-                className="rounded-xl object-cover drop-shadow-[0_0_20px_rgba(0,181,226,0.3)] -scale-x-100"
-                priority
-              />
-            </motion.div>
-          </motion.div>
-        </div>
+        {/* Title */}
+        <motion.h1
+          initial={{ opacity: 0, scale: 0.8 }}
+          animate={{ opacity: 1, scale: 1 }}
+          transition={{ duration: 0.8, type: "spring" }}
+          className="font-[family-name:var(--font-heading)] text-6xl md:text-8xl lg:text-9xl text-squid-pink glitch-text mb-4 leading-none"
+        >
+          MULEY SE
+          <br />
+          TRIAL BY TOKENS
+        </motion.h1>
 
         <motion.p
           initial={{ opacity: 0 }}

@@ -19,9 +19,9 @@ const bebasNeue = Bebas_Neue({
 });
 
 export const metadata: Metadata = {
-  title: "Muley SE AI - Trial by Tokens",
+  title: "Muley SE - Trial by Tokens",
   description:
-    "How We AI - Gamified voting platform for SE AI demo sessions. Trial by Tokens elimination rounds.",
+    "How We AI - Gamified voting platform for SE demo sessions. Trial by Tokens elimination rounds.",
 };
 
 export default function RootLayout({
