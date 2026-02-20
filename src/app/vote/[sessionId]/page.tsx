@@ -134,7 +134,9 @@ export default function VotePage() {
         eliminated={eliminated}
         survivors={survivors}
         onComplete={() => setShowElimination(false)}
-        weekNumber={session.week_number}
+        currentPotValue={0}
+        previousPotValue={0}
+        isFinale={session.is_finale}
       />
 
       <div className="relative z-20 w-full max-w-4xl">
