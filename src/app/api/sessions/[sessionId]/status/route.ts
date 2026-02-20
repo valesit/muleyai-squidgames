@@ -37,7 +37,37 @@ export async function PATCH(
       return NextResponse.json({ error: pError.message }, { status: 500 });
     }
 
-    if ((participants || []).length <= 2 && !isFinale) {
+    // Finale with 1 player: auto-win, close season immediately
+    if (isFinale && (participants || []).length === 1) {
+      const winner = participants![0];
+      await supabaseAdmin
+        .from("participants")
+        .update({ status: "alive", vote_count: 0 })
+        .eq("id", winner.id);
+
+      if (session.season_id) {
+        const { data: seasonSessions } = await supabaseAdmin
+          .from("sessions")
+          .select("pot_contribution")
+          .eq("season_id", session.season_id)
+          .eq("is_finale", false);
+
+        const totalPrizePot = (seasonSessions || []).reduce(
+          (sum, s) => sum + (s.pot_contribution || 25), 0
+        );
+
+        await supabaseAdmin
+          .from("seasons")
+          .update({ status: "closed", winner_name: winner.name, total_prize_pot: totalPrizePot })
+          .eq("id", session.season_id);
+
+        await supabaseAdmin
+          .from("sessions")
+          .update({ status: "completed" })
+          .eq("season_id", session.season_id)
+          .neq("id", sessionId);
+      }
+    } else if ((participants || []).length <= 2 && !isFinale) {
       const allIds = (participants || []).map((p) => p.id);
       if (allIds.length > 0) {
         await supabaseAdmin

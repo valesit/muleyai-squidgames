@@ -12,8 +12,6 @@ import SoundController from "@/components/SoundController";
 import { FloatingShapes } from "@/components/SquidShapes";
 import MuleyLogo from "@/components/MuleyLogo";
 
-const MAX_SELECTIONS = 2;
-
 export default function VotePage() {
   const { sessionId } = useParams<{ sessionId: string }>();
   const [session, setSession] = useState<Session | null>(null);
@@ -27,12 +25,15 @@ export default function VotePage() {
   const [runningPotTotal, setRunningPotTotal] = useState(0);
   const [previousPotTotal, setPreviousPotTotal] = useState(0);
 
+  // Finale with 2 players = vote for 1 only; regular sessions = up to 2
+  const maxSelections = session?.is_finale ? 1 : 2;
+
   const toggleSelection = (id: string) => {
     setSelectedIds((prev) => {
       const newSet = new Set(prev);
       if (newSet.has(id)) {
         newSet.delete(id);
-      } else if (newSet.size < MAX_SELECTIONS) {
+      } else if (newSet.size < maxSelections) {
         newSet.add(id);
       }
       return newSet;
@@ -260,13 +261,15 @@ export default function VotePage() {
               ) : (
                 <>
                   <h2 className="font-[family-name:var(--font-heading)] text-2xl text-squid-green text-center tracking-wider mb-2">
-                    SELECT 1 OR 2 CHAMPIONS
+                    {session.is_finale ? "VOTE FOR THE CHAMPION" : "SELECT 1 OR 2 CHAMPIONS"}
                   </h2>
                   <p className="text-squid-light/40 text-center text-sm mb-6">
-                    You can vote for up to 2 participants
+                    {session.is_finale
+                      ? "Vote for 1 finalist to win the season"
+                      : "You can vote for up to 2 participants"}
                     {selectedIds.size > 0 && (
                       <span className="text-squid-green ml-2">
-                        ({selectedIds.size}/{MAX_SELECTIONS} selected)
+                        ({selectedIds.size}/{maxSelections} selected)
                       </span>
                     )}
                   </p>
@@ -278,7 +281,7 @@ export default function VotePage() {
                         participant={p}
                         selected={selectedIds.has(p.id)}
                         onClick={() => toggleSelection(p.id)}
-                        disabled={!selectedIds.has(p.id) && selectedIds.size >= MAX_SELECTIONS}
+                        disabled={!selectedIds.has(p.id) && selectedIds.size >= maxSelections}
                       />
                     ))}
                   </div>

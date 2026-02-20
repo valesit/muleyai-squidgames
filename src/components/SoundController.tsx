@@ -21,12 +21,32 @@ export default function SoundController({
   const oscillatorRef = useRef<OscillatorNode | null>(null);
   const gainRef = useRef<GainNode | null>(null);
   const [isSpeaking, setIsSpeaking] = useState(false);
+  const hasAnnouncedRef = useRef(false);
+  const wasVotingRef = useRef(false);
 
   const getAudioContext = useCallback(() => {
     if (!audioContextRef.current) {
       audioContextRef.current = new AudioContext();
     }
+    if (audioContextRef.current.state === "suspended") {
+      audioContextRef.current.resume();
+    }
     return audioContextRef.current;
+  }, []);
+
+  // Auto-resume AudioContext on any user interaction (required by browsers)
+  useEffect(() => {
+    function resumeAudio() {
+      if (audioContextRef.current?.state === "suspended") {
+        audioContextRef.current.resume();
+      }
+    }
+    document.addEventListener("click", resumeAudio, { once: true });
+    document.addEventListener("touchstart", resumeAudio, { once: true });
+    return () => {
+      document.removeEventListener("click", resumeAudio);
+      document.removeEventListener("touchstart", resumeAudio);
+    };
   }, []);
 
   const playDollSong = useCallback(() => {
@@ -38,23 +58,23 @@ export default function SoundController({
     gainRef.current = gain;
 
     const notes = [
-      { freq: 392, dur: 0.4 }, // G4
-      { freq: 330, dur: 0.4 }, // E4
-      { freq: 330, dur: 0.4 }, // E4
+      { freq: 392, dur: 0.4 },
+      { freq: 330, dur: 0.4 },
+      { freq: 330, dur: 0.4 },
       { freq: 0, dur: 0.2 },
-      { freq: 392, dur: 0.4 }, // G4
-      { freq: 330, dur: 0.4 }, // E4
-      { freq: 330, dur: 0.4 }, // E4
+      { freq: 392, dur: 0.4 },
+      { freq: 330, dur: 0.4 },
+      { freq: 330, dur: 0.4 },
       { freq: 0, dur: 0.2 },
-      { freq: 392, dur: 0.3 }, // G4
-      { freq: 440, dur: 0.3 }, // A4
-      { freq: 392, dur: 0.3 }, // G4
-      { freq: 330, dur: 0.3 }, // E4
-      { freq: 294, dur: 0.6 }, // D4
+      { freq: 392, dur: 0.3 },
+      { freq: 440, dur: 0.3 },
+      { freq: 392, dur: 0.3 },
+      { freq: 330, dur: 0.3 },
+      { freq: 294, dur: 0.6 },
       { freq: 0, dur: 0.3 },
-      { freq: 294, dur: 0.3 }, // D4
-      { freq: 330, dur: 0.3 }, // E4
-      { freq: 392, dur: 0.6 }, // G4
+      { freq: 294, dur: 0.3 },
+      { freq: 330, dur: 0.3 },
+      { freq: 392, dur: 0.6 },
     ];
 
     let time = ctx.currentTime;
@@ -105,18 +125,35 @@ export default function SoundController({
     [enabled]
   );
 
-  // Play doll song during voting (looped via interval)
+  // Play doll song during voting (looped via interval), stop when voting ends
   useEffect(() => {
-    if (!isVoting || !enabled) return;
-    playDollSong();
-    const interval = setInterval(playDollSong, 5500);
-    return () => clearInterval(interval);
+    if (isVoting && enabled) {
+      wasVotingRef.current = true;
+      playDollSong();
+      const interval = setInterval(playDollSong, 5500);
+      return () => clearInterval(interval);
+    }
+
+    // Voting just stopped -- cancel any lingering audio
+    if (wasVotingRef.current && !isVoting) {
+      wasVotingRef.current = false;
+      speechSynthesis.cancel();
+    }
   }, [isVoting, enabled, playDollSong]);
 
-  // Announce eliminations
+  // Announce eliminations -- only once per trigger
   useEffect(() => {
-    if (!triggerElimination || !enabled || eliminatedPlayers.length === 0)
+    if (!triggerElimination || !enabled || eliminatedPlayers.length === 0) {
+      if (!triggerElimination) {
+        hasAnnouncedRef.current = false;
+      }
       return;
+    }
+
+    if (hasAnnouncedRef.current) return;
+    hasAnnouncedRef.current = true;
+
+    speechSynthesis.cancel();
 
     eliminatedPlayers.forEach((p, i) => {
       setTimeout(() => {
